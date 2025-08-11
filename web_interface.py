@@ -93,6 +93,26 @@ class WebInterface:
                     'timestamp': datetime.now().isoformat()
                 }), 500
         
+        @self.app.route('/api/users')
+        def api_users():
+            """API endpoint for tracked users only"""
+            tracking_data = self.bridge.get_tracked_users_and_devices()
+            return jsonify({
+                'users': tracking_data['users'],
+                'count': tracking_data['users_count'],
+                'last_updated': datetime.now().isoformat()
+            })
+        
+        @self.app.route('/api/devices')
+        def api_devices():
+            """API endpoint for tracked devices only"""
+            tracking_data = self.bridge.get_tracked_users_and_devices()
+            return jsonify({
+                'devices': tracking_data['devices'],
+                'count': tracking_data['devices_count'],
+                'last_updated': datetime.now().isoformat()
+            })
+        
         @self.app.route('/api/config')
         def api_config():
             """API endpoint for configuration (sanitized)"""
