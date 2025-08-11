@@ -5,8 +5,8 @@ services:
     build: .
     container_name: plex-mqtt-bridge
     restart: unless-stopped
-    network_mode: host  # Use host networking - container shares host's network stack
-    # Note: ports section is not needed with host networking
+    ports:
+      - "5000:5000"  # Host:Container port mapping
     volumes:
       - ./config.json:/app/config.json:ro
       - ./tracking_data:/app/tracking_data
