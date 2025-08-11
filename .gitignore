@@ -8,7 +8,11 @@ env/
 venv/
 .venv/
 .env
+.env.*
 .DS_Store
 .vscode/settings.json
 *.log
-config.json
+
+# Docker
+.docker/
+docker-compose.override.yml

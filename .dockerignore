@@ -1,0 +1,40 @@
+# Docker-specific ignores
+.dockerignore
+Dockerfile
+docker-compose.yml
+.docker/
+
+# Development files
+.git/
+.github/
+.vscode/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+
+# Documentation
+README.md
+*.md
+
+# Environment files (we'll mount config.json as volume)
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

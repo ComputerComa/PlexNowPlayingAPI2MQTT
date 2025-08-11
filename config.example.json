@@ -10,8 +10,23 @@
         "username": "",
         "password": "",
         "use_websockets": false,
-        "websocket_path": "/mqtt"
+        "websocket_path": "/mqtt",
+        "protocol_version": 3.1,
+        "use_ssl": false,
+        "topic_strategy": "user_device_track"
     },
+    "multi_session_handling": {
+        "strategy": "all",
+        "user_filter": [],
+        "device_filter": [],
+        "priority_user": ""
+    },
+    "web_interface": {
+        "enabled": true,
+        "host": "0.0.0.0", 
+        "port": 5000
+    },
+    "publish_summary": false,
     "polling_interval": 5,
     "debug": false
 }

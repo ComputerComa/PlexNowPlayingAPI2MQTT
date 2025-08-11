@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plex MQTT Bridge - Status</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #e73c7e 0%, #23a6d5 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 5px solid #007bff;
+        }
+        
+        .status-card.connected {
+            border-left-color: #28a745;
+        }
+        
+        .status-card.disconnected {
+            border-left-color: #dc3545;
+        }
+        
+        .status-card h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1.2em;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .status-label {
+            font-weight: 600;
+            color: #6c757d;
+        }
+        
+        .status-value {
+            color: #495057;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .updates-section {
+            margin-top: 30px;
+        }
+        
+        .updates-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .sessions-list {
+            background: #f8f9fa;
+            border-radius: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .session-card {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            transition: background-color 0.2s;
+        }
+        
+        .session-card:hover {
+            background: #e9ecef;
+        }
+        
+        .session-card:last-child {
+            border-bottom: none;
+        }
+        
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .session-title {
+            font-weight: 600;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        .session-details {
+            font-size: 0.9em;
+            color: #6c757d;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .progress-container {
+            margin-top: 10px;
+        }
+        
+        .progress-text {
+            font-size: 0.8em;
+            color: #6c757d;
+            text-align: center;
+            margin-top: 5px;
+        }
+        
+        .no-sessions {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .update-time {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .update-details {
+            font-size: 0.9em;
+            color: #6c757d;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 6px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #28a745, #20c997);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-playing {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-paused {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        
+        .no-updates {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .update-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 Plex MQTT Bridge</h1>
+            <p>Real-time Music Status Monitor</p>
+        </div>
+        
+        <div class="content">
+            <div class="status-grid" id="statusGrid">
+                <!-- Status cards will be populated by JavaScript -->
+            </div>
+            
+            <div class="updates-section">
+                <div class="updates-header">
+                    <h2>Live Sessions</h2>
+                    <button class="refresh-btn" onclick="refreshData()">🔄 Refresh</button>
+                </div>
+                
+                <div class="sessions-list" id="sessionsList">
+                    <!-- Sessions will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let statusData = {};
+        let sessionsData = {};
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                statusData = await response.json();
+                renderStatus();
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }
+
+        async function fetchSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+                sessionsData = data.sessions;
+                renderSessions();
+            } catch (error) {
+                console.error('Error fetching sessions:', error);
+            }
+        }
+
+        function renderStatus() {
+            const grid = document.getElementById('statusGrid');
+            grid.innerHTML = `
+                <div class="status-card ${statusData.server_connected ? 'connected' : 'disconnected'}">
+                    <h3>📺 Plex Server</h3>
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="connection-status ${statusData.server_connected ? 'connected' : 'disconnected'}">
+                            ${statusData.server_connected ? 'Connected' : 'Disconnected'}
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Server:</span>
+                        <span class="status-value">${statusData.server_name}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Version:</span>
+                        <span class="status-value">${statusData.server_version}</span>
+                    </div>
+                </div>
+
+                <div class="status-card ${statusData.mqtt_connected ? 'connected' : 'disconnected'}">
+                    <h3>📡 MQTT Broker</h3>
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="connection-status ${statusData.mqtt_connected ? 'connected' : 'disconnected'}">
+                            ${statusData.mqtt_connected ? 'Connected' : 'Disconnected'}
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Broker:</span>
+                        <span class="status-value">${statusData.mqtt_broker}:${statusData.mqtt_port}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Protocol:</span>
+                        <span class="status-value">${statusData.mqtt_protocol} ${statusData.websockets ? '(WebSockets)' : '(TCP)'} ${statusData.ssl ? '+ SSL' : ''}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Topic Strategy:</span>
+                        <span class="status-value">${statusData.topic_strategy}</span>
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <h3>📊 Statistics</h3>
+                    <div class="status-item">
+                        <span class="status-label">Uptime:</span>
+                        <span class="status-value">${statusData.uptime}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Polling Interval:</span>
+                        <span class="status-value">${statusData.polling_interval}s</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Total Updates:</span>
+                        <span class="status-value">${statusData.total_updates}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Active Sessions:</span>
+                        <span class="status-value">${statusData.active_sessions}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSessions() {
+            const list = document.getElementById('sessionsList');
+            
+            const sessionKeys = Object.keys(sessionsData);
+            if (sessionKeys.length === 0) {
+                list.innerHTML = '<div class="no-sessions">No active sessions</div>';
+                return;
+            }
+
+            list.innerHTML = sessionKeys.map(sessionId => {
+                const session = sessionsData[sessionId];
+                return `
+                    <div class="session-card">
+                        <div class="session-header">
+                            <div class="session-title">
+                                ${session.artist} - ${session.title}
+                            </div>
+                            <div class="status-badge status-${session.status}">${session.status}</div>
+                        </div>
+                        <div class="session-details">
+                            <div class="detail-item">
+                                <span class="detail-label">👤 User:</span>
+                                <span>${session.user}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">� Device:</span>
+                                <span>${session.device}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">💿 Album:</span>
+                                <span>${session.album}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">⏱️ Position:</span>
+                                <span>${session.position_formatted} / ${session.duration_formatted}</span>
+                            </div>
+                        </div>
+                        ${session.progress_percent > 0 ? `
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${session.progress_percent}%"></div>
+                                </div>
+                                <div class="progress-text">${session.progress_percent.toFixed(1)}% complete</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function refreshData() {
+            fetchStatus();
+            fetchSessions();
+        }
+
+        // Initial load
+        refreshData();
+
+        // Auto-refresh every 5 seconds
+        setInterval(refreshData, 5000);
+    </script>
+</body>
+</html>
