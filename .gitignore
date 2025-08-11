@@ -13,6 +13,9 @@ venv/
 .vscode/settings.json
 *.log
 
+# Tracking data
+tracking_data.json
+
 # Docker
 .docker/
 docker-compose.override.yml

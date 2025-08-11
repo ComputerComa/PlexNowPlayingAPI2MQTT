@@ -9,6 +9,7 @@ services:
       - "5000:5000"
     volumes:
       - ./config.json:/app/config.json:ro
+      - ./tracking_data:/app/tracking_data
     environment:
       - TZ=America/New_York  # Set your timezone
     networks:

@@ -29,6 +29,7 @@ class WebInterface:
         @self.app.route('/api/status')
         def api_status():
             """API endpoint for current status"""
+            tracking_data = self.bridge.get_tracked_users_and_devices()
             status_data = {
                 'server_connected': self.bridge.plex is not None,
                 'mqtt_connected': self.bridge.mqtt_client is not None and self.bridge.mqtt_client.is_connected(),
@@ -43,7 +44,12 @@ class WebInterface:
                 'polling_interval': self.bridge.config.get('polling_interval', 5),
                 'uptime': self.get_uptime(),
                 'active_sessions_count': len([s for s in self.current_sessions.values() if s.get('status') in ['playing', 'paused']]),
-                'total_sessions': len(self.current_sessions)
+                'total_sessions': len(self.current_sessions),
+                'tracked_users_count': tracking_data['users_count'],
+                'tracked_devices_count': tracking_data['devices_count'],
+                'lastfm_enabled': self.bridge.config.get('lastfm', {}).get('enabled', False),
+                'lastfm_connected': self.bridge.lastfm_network is not None,
+                'lastfm_username': self.bridge.config.get('lastfm', {}).get('username', '') if self.bridge.config.get('lastfm', {}).get('enabled', False) else None
             }
             return jsonify(status_data)
         
@@ -59,6 +65,33 @@ class WebInterface:
                 'count': len(active_sessions),
                 'last_updated': datetime.now().isoformat()
             })
+        
+        @self.app.route('/api/users-devices')
+        def api_users_devices():
+            """API endpoint for tracked users and devices"""
+            tracking_data = self.bridge.get_tracked_users_and_devices()
+            # Add persistence info
+            tracking_config = self.bridge.config.get('tracking', {})
+            tracking_data['persistence_enabled'] = tracking_config.get('enabled', True) and tracking_config.get('auto_save', True)
+            tracking_data['persistence_file'] = tracking_config.get('persistence_file', 'tracking_data.json')
+            return jsonify(tracking_data)
+        
+        @self.app.route('/api/users-devices/save', methods=['POST'])
+        def api_save_tracking():
+            """API endpoint to manually save tracking data"""
+            try:
+                self.bridge.force_save_tracking_data()
+                return jsonify({
+                    'success': True,
+                    'message': 'Tracking data saved successfully',
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e),
+                    'timestamp': datetime.now().isoformat()
+                }), 500
         
         @self.app.route('/api/config')
         def api_config():

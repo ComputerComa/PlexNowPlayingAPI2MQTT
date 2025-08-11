@@ -24,6 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY web_interface.py .
 COPY get_plex_token.py .
+COPY get_lastfm_credentials.py .
 COPY templates/ templates/
 COPY config.example.json .
 COPY entrypoint.sh .

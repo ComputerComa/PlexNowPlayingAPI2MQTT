@@ -19,6 +19,12 @@ from plexapi.server import PlexServer
 from plexapi.exceptions import PlexApiException, Unauthorized
 from web_interface import WebInterface
 
+try:
+    import pylast
+    LASTFM_AVAILABLE = True
+except ImportError:
+    LASTFM_AVAILABLE = False
+
 
 class PlexMQTTBridge:
     """Main class for bridging Plex API to MQTT"""
@@ -32,12 +38,30 @@ class PlexMQTTBridge:
         self.start_time = datetime.now()
         self.web_interface = None
         
+        # Track seen users and devices
+        self.seen_users = set()
+        self.seen_devices = set()
+        self.users_devices_last_published = {
+            'users': None,
+            'devices': None
+        }
+        
+        # Last.fm scrobbling setup
+        self.lastfm_network = None
+        self.scrobbled_tracks = {}  # Track what we've scrobbled to avoid duplicates
+        
         # Setup logging
         logging.basicConfig(
             level=logging.DEBUG if self.config.get('debug', False) else logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Load persistent tracking data after logger is set up
+        self._load_tracking_data()
+        
+        # Initialize Last.fm if enabled
+        self._init_lastfm()
         
         # Setup web interface if enabled
         if self.config.get('web_interface', {}).get('enabled', True):
@@ -451,6 +475,273 @@ class PlexMQTTBridge:
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             self.logger.debug(f"Published session summary: {len(music_sessions)} active sessions")
     
+    def _track_user_and_device(self, music_info: Dict):
+        """Track a user and device from session info"""
+        # Check if tracking is enabled
+        tracking_config = self.config.get('tracking', {})
+        if not tracking_config.get('enabled', True):
+            return
+            
+        user = music_info.get('user', 'Unknown')
+        device = music_info.get('device', 'unknown')
+        
+        # Track if these are new entries
+        new_user = user not in self.seen_users
+        new_device = device not in self.seen_devices
+        
+        # Add to tracking sets
+        self.seen_users.add(user)
+        self.seen_devices.add(device)
+        
+        # Auto-save if new users or devices were added
+        if (new_user or new_device) and tracking_config.get('auto_save', True):
+            self._save_tracking_data()
+            if new_user:
+                self.logger.info(f"New user tracked: {user}")
+            if new_device:
+                self.logger.info(f"New device tracked: {device}")
+    
+    def _publish_users_and_devices(self):
+        """Publish arrays of seen users and devices if they have changed"""
+        # Check if tracking is enabled
+        tracking_config = self.config.get('tracking', {})
+        if not tracking_config.get('enabled', True):
+            return
+        
+        current_users = sorted(list(self.seen_users))
+        current_devices = sorted(list(self.seen_devices))
+        
+        base_topic = self.config['mqtt']['topic']
+        users_topic_suffix = tracking_config.get('users_topic', 'USERS')
+        devices_topic_suffix = tracking_config.get('devices_topic', 'DEVICES')
+        
+        # Check if users list has changed
+        if self.users_devices_last_published['users'] != current_users:
+            users_topic = f"{base_topic}/{users_topic_suffix}"
+            users_data = {
+                'users': current_users,
+                'count': len(current_users),
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }
+            
+            if self._publish_to_mqtt(users_data, users_topic):
+                self.users_devices_last_published['users'] = current_users.copy()
+                self.logger.info(f"Published users list to {users_topic}: {current_users}")
+        
+        # Check if devices list has changed
+        if self.users_devices_last_published['devices'] != current_devices:
+            devices_topic = f"{base_topic}/{devices_topic_suffix}"
+            devices_data = {
+                'devices': current_devices,
+                'count': len(current_devices),
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }
+            
+            if self._publish_to_mqtt(devices_data, devices_topic):
+                self.users_devices_last_published['devices'] = current_devices.copy()
+                self.logger.info(f"Published devices list to {devices_topic}: {current_devices}")
+    
+    def get_tracked_users_and_devices(self) -> Dict:
+        """Get current tracked users and devices for API/web interface"""
+        return {
+            'users': sorted(list(self.seen_users)),
+            'devices': sorted(list(self.seen_devices)),
+            'users_count': len(self.seen_users),
+            'devices_count': len(self.seen_devices)
+        }
+    
+    def _get_persistence_file_path(self) -> str:
+        """Get the path to the persistence file"""
+        tracking_config = self.config.get('tracking', {})
+        filename = tracking_config.get('persistence_file', 'tracking_data.json')
+        # Store in the same directory as the application
+        return filename
+    
+    def _load_tracking_data(self):
+        """Load persistent tracking data from file"""
+        tracking_config = self.config.get('tracking', {})
+        if not tracking_config.get('enabled', True):
+            return
+        
+        persistence_file = self._get_persistence_file_path()
+        
+        try:
+            with open(persistence_file, 'r') as f:
+                data = json.load(f)
+                
+            # Load users and devices from file
+            if 'users' in data:
+                self.seen_users = set(data['users'])
+                self.logger.info(f"Loaded {len(self.seen_users)} users from {persistence_file}")
+                
+            if 'devices' in data:
+                self.seen_devices = set(data['devices'])
+                self.logger.info(f"Loaded {len(self.seen_devices)} devices from {persistence_file}")
+                
+            # Log what was loaded
+            if self.seen_users or self.seen_devices:
+                self.logger.info(f"Restored tracking data: {sorted(list(self.seen_users))} users, {sorted(list(self.seen_devices))} devices")
+                
+        except FileNotFoundError:
+            self.logger.info(f"No persistence file found at {persistence_file}, starting with empty tracking data")
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error reading persistence file {persistence_file}: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error loading tracking data: {e}")
+    
+    def _save_tracking_data(self):
+        """Save tracking data to persistent storage"""
+        tracking_config = self.config.get('tracking', {})
+        if not tracking_config.get('enabled', True) or not tracking_config.get('auto_save', True):
+            return
+        
+        persistence_file = self._get_persistence_file_path()
+        
+        try:
+            data = {
+                'users': sorted(list(self.seen_users)),
+                'devices': sorted(list(self.seen_devices)),
+                'last_saved': datetime.utcnow().isoformat() + 'Z',
+                'total_users': len(self.seen_users),
+                'total_devices': len(self.seen_devices)
+            }
+            
+            with open(persistence_file, 'w') as f:
+                json.dump(data, f, indent=2)
+                
+            self.logger.debug(f"Saved tracking data to {persistence_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving tracking data to {persistence_file}: {e}")
+    
+    def force_save_tracking_data(self):
+        """Force save tracking data (useful for API calls or shutdown)"""
+        self._save_tracking_data()
+        self.logger.info("Tracking data saved to persistent storage")
+    
+    def _init_lastfm(self):
+        """Initialize Last.fm scrobbling if enabled and available"""
+        lastfm_config = self.config.get('lastfm', {})
+        
+        if not lastfm_config.get('enabled', False):
+            self.logger.info("Last.fm scrobbling is disabled")
+            return
+        
+        if not LASTFM_AVAILABLE:
+            self.logger.error("Last.fm scrobbling is enabled but pylast library is not installed. Install with: pip install pylast")
+            return
+        
+        # Check required configuration
+        api_key = lastfm_config.get('api_key', '')
+        api_secret = lastfm_config.get('api_secret', '')
+        username = lastfm_config.get('username', '')
+        password = lastfm_config.get('password', '')
+        
+        if not all([api_key, api_secret, username, password]):
+            self.logger.error("Last.fm scrobbling is enabled but missing required configuration (api_key, api_secret, username, password)")
+            return
+        
+        try:
+            # Initialize Last.fm network
+            self.lastfm_network = pylast.LastFMNetwork(
+                api_key=api_key,
+                api_secret=api_secret,
+                username=username,
+                password_hash=pylast.md5(password)
+            )
+            
+            # Test authentication
+            user = self.lastfm_network.get_user(username)
+            user.get_playcount()  # This will fail if auth is bad
+            
+            self.logger.info(f"Last.fm scrobbling initialized successfully for user: {username}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Last.fm scrobbling: {e}")
+            self.lastfm_network = None
+    
+    def _scrobble_to_lastfm(self, session_data: Dict):
+        """Scrobble track to Last.fm if conditions are met"""
+        if not self.lastfm_network or not session_data:
+            return
+        
+        lastfm_config = self.config.get('lastfm', {})
+        scrobble_threshold = lastfm_config.get('scrobble_threshold', 0.5)
+        min_duration = lastfm_config.get('min_duration', 30)
+        
+        try:
+            # Get track information
+            artist = session_data.get('artist', '')
+            title = session_data.get('title', '')
+            album = session_data.get('album', '')
+            duration = session_data.get('duration', 0)
+            progress_percent = session_data.get('progress_percent', 0)
+            
+            # Check if track meets scrobble criteria
+            if not artist or not title:
+                return
+            
+            if duration < min_duration * 1000:  # duration is in ms
+                return
+            
+            if progress_percent < scrobble_threshold:
+                return
+            
+            # Create unique track identifier to avoid duplicate scrobbles
+            track_id = f"{artist}:{title}:{session_data.get('session_key', '')}"
+            
+            # Check if we've already scrobbled this track for this session
+            if track_id in self.scrobbled_tracks:
+                return
+            
+            # Scrobble the track
+            timestamp = int(time.time())
+            
+            self.lastfm_network.scrobble(
+                artist=artist,
+                title=title,
+                timestamp=timestamp,
+                album=album if album else None
+            )
+            
+            # Mark as scrobbled
+            self.scrobbled_tracks[track_id] = timestamp
+            
+            # Clean up old scrobbled tracks (keep only last 100)
+            if len(self.scrobbled_tracks) > 100:
+                oldest_tracks = sorted(self.scrobbled_tracks.items(), key=lambda x: x[1])[:50]
+                for old_track_id, _ in oldest_tracks:
+                    del self.scrobbled_tracks[old_track_id]
+            
+            self.logger.info(f"Scrobbled to Last.fm: {artist} - {title}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to scrobble to Last.fm: {e}")
+    
+    def _update_lastfm_now_playing(self, session_data: Dict):
+        """Update Last.fm 'now playing' status"""
+        if not self.lastfm_network or not session_data:
+            return
+        
+        try:
+            artist = session_data.get('artist', '')
+            title = session_data.get('title', '')
+            album = session_data.get('album', '')
+            
+            if not artist or not title:
+                return
+            
+            self.lastfm_network.update_now_playing(
+                artist=artist,
+                title=title,
+                album=album if album else None
+            )
+            
+            self.logger.debug(f"Updated Last.fm now playing: {artist} - {title}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update Last.fm now playing: {e}")
+    
     def _publish_to_mqtt(self, data: Dict, topic: str = None) -> bool:
         """Publish data to MQTT broker with v5 support"""
         try:
@@ -584,12 +875,20 @@ class PlexMQTTBridge:
                         current_session_keys.add(session_key)
                         active_web_sessions.add(web_session_key)
                         
+                        # Track this user and device
+                        self._track_user_and_device(music_info)
+                        
                         # Only publish if there are significant changes
                         if self._should_publish_update(music_info):
                             topic = self._get_topic_for_session(music_info)
                             self._publish_to_mqtt(music_info, topic)
                             
                             self.logger.info(f"Published update for {music_info['user']}: {music_info['artist']} - {music_info['title']} ({music_info['status']}) to {topic}")
+                        
+                        # Last.fm integration
+                        if music_info.get('status') == 'playing':
+                            self._update_lastfm_now_playing(music_info)
+                            self._scrobble_to_lastfm(music_info)
                         
                         # Update web interface session data
                         if self.web_interface:
@@ -598,6 +897,9 @@ class PlexMQTTBridge:
                         
                         # Update last status
                         self.last_status[session_key] = music_info
+                    
+                    # Publish users and devices lists if they have changed
+                    self._publish_users_and_devices()
                     
                     # Publish session summary if we have multiple sessions or summary is enabled
                     if len(all_music_sessions) > 1 or self.config.get('publish_summary', False):
@@ -637,6 +939,10 @@ class PlexMQTTBridge:
         except Exception as e:
             self.logger.error(f"Unexpected error: {e}")
         finally:
+            # Save tracking data before shutdown
+            self._save_tracking_data()
+            self.logger.info("Saved tracking data before shutdown")
+            
             if self.mqtt_client:
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()

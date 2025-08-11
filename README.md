@@ -15,6 +15,8 @@ Built using the official [PlexAPI](https://python-plexapi.readthedocs.io/) libra
 - 🌐 **Web Interface** - Real-time dashboard for monitoring active sessions
 - 🐳 **Docker Ready** - Easy deployment with Docker and Docker Compose
 - 🔧 **Flexible Configuration** - Support for config files and environment variables
+- 🎤 **Last.fm Scrobbling** - Optional scrobbling to Last.fm with configurable thresholds
+- 📊 **User/Device Tracking** - Track and persist users and devices across sessions
 
 ## Requirements
 
@@ -150,6 +152,37 @@ Edit `config.json` with your Plex and MQTT settings:
 - **8883**: Standard MQTT TCP with SSL/TLS
 - **9001**: MQTT over WebSockets (unencrypted)
 - **443**: MQTT over WebSockets with SSL/TLS
+
+### Last.fm Scrobbling (Optional)
+
+Enable automatic scrobbling to Last.fm by adding this configuration:
+
+```json
+"lastfm": {
+    "enabled": true,
+    "api_key": "YOUR_LASTFM_API_KEY",
+    "api_secret": "YOUR_LASTFM_API_SECRET",
+    "username": "YOUR_LASTFM_USERNAME", 
+    "password": "YOUR_LASTFM_PASSWORD",
+    "scrobble_threshold": 0.5,
+    "min_duration": 30
+}
+```
+
+**Configuration Options:**
+- **`enabled`** - Enable/disable Last.fm scrobbling
+- **`api_key`** - Your Last.fm API key (get from https://www.last.fm/api/account/create)
+- **`api_secret`** - Your Last.fm API secret
+- **`username`** - Your Last.fm username
+- **`password`** - Your Last.fm password (hashed before transmission)
+- **`scrobble_threshold`** - Percentage of track that must be played to scrobble (0.5 = 50%)
+- **`min_duration`** - Minimum track duration in seconds to be eligible for scrobbling
+
+**Getting Last.fm API Credentials:**
+Run the helper script for detailed instructions:
+```bash
+python get_lastfm_credentials.py
+```
 
 ## MQTT Message Format
 

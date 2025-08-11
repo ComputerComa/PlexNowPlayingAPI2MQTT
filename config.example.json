@@ -26,6 +26,22 @@
         "host": "0.0.0.0", 
         "port": 5000
     },
+    "tracking": {
+        "enabled": true,
+        "users_topic": "USERS",
+        "devices_topic": "DEVICES",
+        "persistence_file": "tracking_data.json",
+        "auto_save": true
+    },
+    "lastfm": {
+        "enabled": false,
+        "api_key": "YOUR_LASTFM_API_KEY",
+        "api_secret": "YOUR_LASTFM_API_SECRET", 
+        "username": "YOUR_LASTFM_USERNAME",
+        "password": "YOUR_LASTFM_PASSWORD",
+        "scrobble_threshold": 0.5,
+        "min_duration": 30
+    },
     "publish_summary": false,
     "polling_interval": 5,
     "debug": false

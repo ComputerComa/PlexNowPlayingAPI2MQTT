@@ -31,6 +31,13 @@ create_config_from_env() {
         "enabled": ${WEB_INTERFACE_ENABLED:-true},
         "host": "${WEB_INTERFACE_HOST:-0.0.0.0}",
         "port": ${WEB_INTERFACE_PORT:-5000}
+    },
+    "tracking": {
+        "enabled": ${TRACKING_ENABLED:-true},
+        "users_topic": "${TRACKING_USERS_TOPIC:-USERS}",
+        "devices_topic": "${TRACKING_DEVICES_TOPIC:-DEVICES}",
+        "persistence_file": "${TRACKING_PERSISTENCE_FILE:-tracking_data.json}",
+        "auto_save": ${TRACKING_AUTO_SAVE:-true}
     }
 }
 EOF

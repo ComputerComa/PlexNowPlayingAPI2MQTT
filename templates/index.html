@@ -197,6 +197,41 @@
             font-style: italic;
         }
         
+        .tracking-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .tracking-section {
+            margin-bottom: 20px;
+        }
+        
+        .tracking-section h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .tracking-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .tracking-item {
+            background: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            border: 1px solid #dee2e6;
+            color: #495057;
+        }
+        
+        .no-tracking {
+            color: #6c757d;
+            font-style: italic;
+        }
+        
         .update-time {
             font-size: 0.9em;
             color: #6c757d;
@@ -320,12 +355,24 @@
                     <!-- Sessions will be populated by JavaScript -->
                 </div>
             </div>
+            
+            <div class="updates-section">
+                <div class="updates-header">
+                    <h2>Tracked Users & Devices</h2>
+                    <button class="refresh-btn" onclick="refreshData()">🔄 Refresh</button>
+                </div>
+                
+                <div class="tracking-info" id="trackingInfo">
+                    <!-- Tracking info will be populated by JavaScript -->
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
         let statusData = {};
         let sessionsData = {};
+        let trackingData = {};
 
         async function fetchStatus() {
             try {
@@ -345,6 +392,16 @@
                 renderSessions();
             } catch (error) {
                 console.error('Error fetching sessions:', error);
+            }
+        }
+        
+        async function fetchTracking() {
+            try {
+                const response = await fetch('/api/users-devices');
+                trackingData = await response.json();
+                renderTracking();
+            } catch (error) {
+                console.error('Error fetching tracking data:', error);
             }
         }
 
@@ -391,6 +448,24 @@
                     </div>
                 </div>
 
+                <div class="status-card ${statusData.lastfm_enabled ? (statusData.lastfm_connected ? 'connected' : 'disconnected') : ''}">
+                    <h3>🎵 Last.fm</h3>
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="connection-status ${statusData.lastfm_enabled ? (statusData.lastfm_connected ? 'connected' : 'disconnected') : 'disconnected'}">
+                            ${statusData.lastfm_enabled ? 
+                                (statusData.lastfm_connected ? 'Connected' : 'Disconnected') 
+                                : 'Disabled'}
+                        </span>
+                    </div>
+                    ${statusData.lastfm_enabled ? `
+                    <div class="status-item">
+                        <span class="status-label">Username:</span>
+                        <span class="status-value">${statusData.lastfm_username || 'Unknown'}</span>
+                    </div>
+                    ` : ''}
+                </div>
+
                 <div class="status-card">
                     <h3>📊 Statistics</h3>
                     <div class="status-item">
@@ -402,12 +477,16 @@
                         <span class="status-value">${statusData.polling_interval}s</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Total Updates:</span>
-                        <span class="status-value">${statusData.total_updates}</span>
+                        <span class="status-label">Active Sessions:</span>
+                        <span class="status-value">${statusData.active_sessions_count}</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Active Sessions:</span>
-                        <span class="status-value">${statusData.active_sessions}</span>
+                        <span class="status-label">Tracked Users:</span>
+                        <span class="status-value">${statusData.tracked_users_count}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Tracked Devices:</span>
+                        <span class="status-value">${statusData.tracked_devices_count}</span>
                     </div>
                 </div>
             `;
@@ -462,10 +541,47 @@
                 `;
             }).join('');
         }
+        
+        function renderTracking() {
+            const container = document.getElementById('trackingInfo');
+            
+            let html = '';
+            
+            // Users section
+            html += '<div class="tracking-section">';
+            html += '<h4>👥 Users (' + trackingData.users_count + ')</h4>';
+            if (trackingData.users && trackingData.users.length > 0) {
+                html += '<div class="tracking-list">';
+                trackingData.users.forEach(user => {
+                    html += `<span class="tracking-item">${user}</span>`;
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="no-tracking">No users tracked yet</div>';
+            }
+            html += '</div>';
+            
+            // Devices section
+            html += '<div class="tracking-section">';
+            html += '<h4>📱 Devices (' + trackingData.devices_count + ')</h4>';
+            if (trackingData.devices && trackingData.devices.length > 0) {
+                html += '<div class="tracking-list">';
+                trackingData.devices.forEach(device => {
+                    html += `<span class="tracking-item">${device}</span>`;
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="no-tracking">No devices tracked yet</div>';
+            }
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
 
         function refreshData() {
             fetchStatus();
             fetchSessions();
+            fetchTracking();
         }
 
         // Initial load
