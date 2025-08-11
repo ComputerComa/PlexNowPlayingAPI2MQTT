@@ -1,5 +1,5 @@
 # Use Python 3.11 slim image for smaller size
-FROM python:3.11-slim
+FROM python:3.11-slim-buster
 
 # Set working directory
 WORKDIR /app
@@ -12,8 +12,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
-    ping \
-    dig \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better Docker layer caching
