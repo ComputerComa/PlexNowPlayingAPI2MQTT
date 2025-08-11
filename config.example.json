@@ -1,0 +1,17 @@
+{
+    "plex": {
+        "url": "http://localhost:32400",
+        "token": "YOUR_PLEX_TOKEN_HERE"
+    },
+    "mqtt": {
+        "broker": "localhost",
+        "port": 1883,
+        "topic": "plex/nowplaying",
+        "username": "",
+        "password": "",
+        "use_websockets": false,
+        "websocket_path": "/mqtt"
+    },
+    "polling_interval": 5,
+    "debug": false
+}
