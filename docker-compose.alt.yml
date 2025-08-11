@@ -1,29 +1,33 @@
 version: '3.8'
 
+# Alternative docker-compose with different port mapping for troubleshooting
 services:
   plex-mqtt-bridge:
     build: .
-    container_name: plex-mqtt-bridge
+    container_name: plex-mqtt-bridge-alt
     restart: unless-stopped
     ports:
-      - "5000:5000"  # Host:Container port mapping
+      - "8080:5000"  # Use port 8080 on host instead of 5000
     volumes:
       - ./config.json:/app/config.json:ro
       - ./tracking_data:/app/tracking_data
     environment:
-      - TZ=America/New_York  # Set your timezone
-      - DEBUG=true  # Enable debug logging for troubleshooting
+      - TZ=America/New_York
+      - DEBUG=true
+    networks:
+      - plex-mqtt-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Add logging for debugging
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-
+networks:
+  plex-mqtt-network:
+    driver: bridge

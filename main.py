@@ -75,8 +75,14 @@ class PlexMQTTBridge:
             host = web_config.get('host', '0.0.0.0')
             port = web_config.get('port', 5000)
             
+            self.logger.info(f"Starting web interface on {host}:{port}")
+            
             def run_server():
-                self.web_interface.run(host=host, port=port, debug=False)
+                try:
+                    self.logger.info(f"Flask server binding to {host}:{port}")
+                    self.web_interface.run(host=host, port=port, debug=self.config.get('debug', False))
+                except Exception as e:
+                    self.logger.error(f"Flask server failed to start: {e}")
             
             web_thread = Thread(target=run_server, daemon=True)
             web_thread.start()
