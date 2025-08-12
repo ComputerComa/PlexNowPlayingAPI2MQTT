@@ -10,6 +10,7 @@ services:
     volumes:
       - ./config.json:/app/config.json:ro
       - ./tracking_data:/app/tracking_data
+      - ./logs:/app/logs
     environment:
       - TZ=America/New_York  # Set your timezone
       - DEBUG=true  # Enable debug logging for troubleshooting

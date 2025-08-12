@@ -12,6 +12,8 @@ import sys
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 from threading import Thread
+from logging.handlers import RotatingFileHandler
+import os
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
@@ -63,10 +65,7 @@ class PlexMQTTBridge:
         self.ha_last_states = {}  # Track last state for each sensor to detect changes
         
         # Setup logging
-        logging.basicConfig(
-            level=logging.DEBUG if self.config.get('debug', False) else logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s'
-        )
+        self._setup_logging()
         self.logger = logging.getLogger(__name__)
         
         # Load persistent tracking data after logger is set up
@@ -80,6 +79,58 @@ class PlexMQTTBridge:
             self.web_interface = WebInterface(self)
             self._start_web_server()
         
+    def _setup_logging(self):
+        """Setup logging with file rotation"""
+        # Get logging configuration
+        logging_config = self.config.get('logging', {})
+        
+        # Basic configuration
+        log_level = logging.DEBUG if self.config.get('debug', False) else logging.INFO
+        log_format = logging_config.get('format', '%(asctime)s - %(levelname)s - %(message)s')
+        
+        # Clear existing handlers
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        
+        # Console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(log_level)
+        console_formatter = logging.Formatter(log_format)
+        console_handler.setFormatter(console_formatter)
+        
+        # File handler with rotation (if enabled)
+        handlers = [console_handler]
+        
+        if logging_config.get('file_enabled', True):
+            # Create logs directory if it doesn't exist
+            log_dir = logging_config.get('directory', 'logs')
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            
+            log_filename = logging_config.get('filename', 'plex_mqtt_bridge.log')
+            log_filepath = os.path.join(log_dir, log_filename)
+            
+            # File rotation settings
+            max_bytes = logging_config.get('max_file_size_mb', 10) * 1024 * 1024  # Convert MB to bytes
+            backup_count = logging_config.get('backup_count', 5)
+            
+            file_handler = RotatingFileHandler(
+                log_filepath,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(log_level)
+            file_formatter = logging.Formatter(log_format)
+            file_handler.setFormatter(file_formatter)
+            handlers.append(file_handler)
+        
+        # Configure root logger
+        root_logger.setLevel(log_level)
+        for handler in handlers:
+            root_logger.addHandler(handler)
+    
     def _start_web_server(self):
         """Start the web server in a separate thread"""
         try:

@@ -15,6 +15,7 @@ Built using the official [PlexAPI](https://python-plexapi.readthedocs.io/) libra
 - 🌐 **Web Interface** - Real-time dashboard for monitoring active sessions
 - 🐳 **Docker Ready** - Easy deployment with Docker and Docker Compose
 - 🔧 **Flexible Configuration** - Support for config files and environment variables
+- 📝 **File Logging** - Automatic log rotation and persistent logging support
 - 🎤 **Last.fm Scrobbling** - Optional scrobbling to Last.fm with configurable thresholds
 - 📊 **User/Device Tracking** - Track and persist users and devices across sessions
 

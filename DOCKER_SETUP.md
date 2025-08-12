@@ -195,8 +195,8 @@ services:
           cpus: '0.5'
 ```
 
-### Persistent Logs
-Mount a log directory:
+### Persistent Logs and Data
+Mount directories for logs and tracking data:
 
 ```yaml
 services:
@@ -204,5 +204,12 @@ services:
     # ... other settings
     volumes:
       - ./config.json:/app/config.json:ro
-      - ./logs:/app/logs
+      - ./tracking_data:/app/tracking_data  # Persistent user/device tracking
+      - ./logs:/app/logs                    # Persistent application logs
 ```
+
+The application will automatically:
+- Create log files in the `./logs` directory on your host
+- Rotate logs when they reach 10MB (configurable in config.json)
+- Keep 5 backup files (configurable in config.json)
+- Maintain tracking data persistence across container restarts

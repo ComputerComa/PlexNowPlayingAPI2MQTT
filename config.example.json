@@ -51,6 +51,14 @@
         "model": "Plex MQTT Bridge",
         "sw_version": "1.0.0"
     },
+    "logging": {
+        "file_enabled": true,
+        "directory": "logs",
+        "filename": "plex_mqtt_bridge.log",
+        "max_file_size_mb": 10,
+        "backup_count": 5,
+        "format": "%(asctime)s - %(levelname)s - %(message)s"
+    },
     "publish_summary": false,
     "polling_interval": 5,
     "debug": false
