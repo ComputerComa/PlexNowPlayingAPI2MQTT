@@ -34,6 +34,10 @@ RUN chmod +x entrypoint.sh
 
 # Create a non-root user for security
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+
+# Create logs directory with proper permissions
+RUN mkdir -p /app/logs && chown -R app:app /app/logs
+
 USER app
 
 # Expose the web interface port

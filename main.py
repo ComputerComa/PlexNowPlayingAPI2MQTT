@@ -103,28 +103,34 @@ class PlexMQTTBridge:
         handlers = [console_handler]
         
         if logging_config.get('file_enabled', True):
-            # Create logs directory if it doesn't exist
-            log_dir = logging_config.get('directory', 'logs')
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-            
-            log_filename = logging_config.get('filename', 'plex_mqtt_bridge.log')
-            log_filepath = os.path.join(log_dir, log_filename)
-            
-            # File rotation settings
-            max_bytes = logging_config.get('max_file_size_mb', 10) * 1024 * 1024  # Convert MB to bytes
-            backup_count = logging_config.get('backup_count', 5)
-            
-            file_handler = RotatingFileHandler(
-                log_filepath,
-                maxBytes=max_bytes,
-                backupCount=backup_count,
-                encoding='utf-8'
-            )
-            file_handler.setLevel(log_level)
-            file_formatter = logging.Formatter(log_format)
-            file_handler.setFormatter(file_formatter)
-            handlers.append(file_handler)
+            try:
+                # Create logs directory if it doesn't exist
+                log_dir = logging_config.get('directory', 'logs')
+                if not os.path.exists(log_dir):
+                    os.makedirs(log_dir, exist_ok=True)
+                
+                log_filename = logging_config.get('filename', 'plex_mqtt_bridge.log')
+                log_filepath = os.path.join(log_dir, log_filename)
+                
+                # File rotation settings
+                max_bytes = logging_config.get('max_file_size_mb', 10) * 1024 * 1024  # Convert MB to bytes
+                backup_count = logging_config.get('backup_count', 5)
+                
+                file_handler = RotatingFileHandler(
+                    log_filepath,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding='utf-8'
+                )
+                file_handler.setLevel(log_level)
+                file_formatter = logging.Formatter(log_format)
+                file_handler.setFormatter(file_formatter)
+                handlers.append(file_handler)
+                
+            except (PermissionError, OSError) as e:
+                # If file logging fails, just continue with console logging
+                print(f"Warning: Could not setup file logging: {e}")
+                print("Continuing with console logging only...")
         
         # Configure root logger
         root_logger.setLevel(log_level)

@@ -186,6 +186,72 @@ docker-compose exec plex-mqtt-bridge bash
 docker-compose exec plex-mqtt-bridge python get_plex_token.py
 ```
 
+### Permission issues with logs:
+If you encounter permission errors when writing to logs:
+
+**On Linux/macOS:**
+```bash
+# Create logs directory with proper permissions
+mkdir -p logs
+sudo chown -R 1000:1000 logs
+```
+
+**On Windows:**
+```powershell
+# Create logs directory (usually no permission issues on Windows)
+New-Item -ItemType Directory -Path "logs" -Force
+```
+
+**Alternative:** Disable file logging in `config.json`:
+```json
+{
+  "logging": {
+    "file_enabled": false
+  }
+}
+```
+
+## Logging and Persistence
+
+The application supports file logging with automatic rotation. Logs are persisted using Docker volumes:
+
+### Volume Mounts
+- `./logs:/app/logs` - Application logs with rotation
+- `./tracking_data:/app/tracking_data` - User/device tracking persistence  
+- `./config.json:/app/config.json:ro` - Configuration (read-only)
+
+### Log Configuration
+Configure logging in `config.json`:
+```json
+{
+  "logging": {
+    "file_enabled": true,
+    "directory": "logs",
+    "filename": "plex_mqtt_bridge.log", 
+    "max_file_size_mb": 10,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(levelname)s - %(message)s"
+  }
+}
+```
+
+### Log Rotation
+- **Max file size**: 10MB (configurable)
+- **Backup count**: 5 files (configurable)
+- **Location**: `./logs/plex_mqtt_bridge.log` (host) → `/app/logs/plex_mqtt_bridge.log` (container)
+
+### Viewing Logs
+```bash
+# View current log file
+tail -f logs/plex_mqtt_bridge.log
+
+# View Docker container logs
+docker-compose logs -f plex-mqtt-bridge
+
+# View logs inside container
+docker-compose exec plex-mqtt-bridge tail -f /app/logs/plex_mqtt_bridge.log
+```
+
 ## Security Considerations
 
 1. **Non-root user**: Container runs as non-root user for security
