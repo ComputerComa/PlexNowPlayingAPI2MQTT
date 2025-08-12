@@ -60,6 +60,7 @@ class PlexMQTTBridge:
         # Home Assistant auto discovery setup
         self.ha_sensors = {}  # Store sensor instances keyed by user_device
         self.ha_settings = None  # HA MQTT settings
+        self.ha_last_states = {}  # Track last state for each sensor to detect changes
         
         # Setup logging
         logging.basicConfig(
@@ -843,48 +844,36 @@ class PlexMQTTBridge:
             self.logger.error(f"Failed to create Home Assistant sensor for {user}/{device}: {e}")
     
     def _update_ha_sensor(self, user: str, device: str, music_info: Dict):
-        """Update Home Assistant sensor with current music info"""
+        """Update Home Assistant sensor with current music info (only if changed)"""
         if not self.ha_settings or not HA_DISCOVERABLE_AVAILABLE:
             return
-        
+
         try:
             entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
             
             # Create sensor if it doesn't exist
             if entity_id not in self.ha_sensors:
                 self._create_ha_sensor(user, device)
-            
+
             sensor = self.ha_sensors.get(entity_id)
             if not sensor:
                 return
-            
-            # Prepare state and attributes
+
+            # Prepare state
             state = music_info.get('title', 'Not Playing') if music_info.get('status') == 'playing' else 'Not Playing'
             
-            attributes = {
-                'artist': music_info.get('artist', 'Unknown'),
-                'album': music_info.get('album', 'Unknown'),
-                'title': music_info.get('title', 'Unknown'),
-                'status': music_info.get('status', 'unknown'),
-                'progress_percent': music_info.get('progress_percent', 0),
-                'duration_formatted': music_info.get('duration_formatted', '0:00'),
-                'position_formatted': music_info.get('position_formatted', '0:00'),
-                'remaining_formatted': music_info.get('remaining_formatted', '0:00'),
-                'year': music_info.get('year', ''),
-                'track_number': music_info.get('track_number', ''),
-                'bitrate': music_info.get('bitrate', ''),
-                'codec': music_info.get('codec', ''),
-                'user': music_info.get('user', ''),
-                'device': music_info.get('device', ''),
-                'thumbnail': music_info.get('thumb', '')
-            }
+            # Check if state has changed
+            last_state = self.ha_last_states.get(entity_id)
+            if last_state == state:
+                # No change, skip update
+                return
             
-            # Update sensor
+            # Update state and remember it
             sensor.set_state(state)
-            sensor.set_attributes(attributes)
-            
+            self.ha_last_states[entity_id] = state
+
             self.logger.debug(f"Updated Home Assistant sensor for {user}/{device}: {state}")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to update Home Assistant sensor for {user}/{device}: {e}")
     
@@ -892,13 +881,15 @@ class PlexMQTTBridge:
         """Remove Home Assistant sensor for a user/device"""
         if not self.ha_settings or not HA_DISCOVERABLE_AVAILABLE:
             return
-        
+
         try:
             entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
             
             if entity_id in self.ha_sensors:
-                # The library doesn't have explicit removal, but we can delete our reference
+                # Remove sensor and state tracking
                 del self.ha_sensors[entity_id]
+                if entity_id in self.ha_last_states:
+                    del self.ha_last_states[entity_id]
                 self.logger.info(f"Removed Home Assistant sensor for {user}/{device}")
                 
         except Exception as e:
