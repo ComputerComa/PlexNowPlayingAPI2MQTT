@@ -25,6 +25,13 @@ try:
 except ImportError:
     LASTFM_AVAILABLE = False
 
+try:
+    from ha_mqtt_discoverable import Settings, DeviceInfo
+    from ha_mqtt_discoverable.sensors import Sensor, SensorInfo
+    HA_DISCOVERABLE_AVAILABLE = True
+except ImportError:
+    HA_DISCOVERABLE_AVAILABLE = False
+
 
 class PlexMQTTBridge:
     """Main class for bridging Plex API to MQTT"""
@@ -49,6 +56,10 @@ class PlexMQTTBridge:
         # Last.fm scrobbling setup
         self.lastfm_network = None
         self.scrobbled_tracks = {}  # Track what we've scrobbled to avoid duplicates
+        
+        # Home Assistant auto discovery setup
+        self.ha_sensors = {}  # Store sensor instances keyed by user_device
+        self.ha_settings = None  # HA MQTT settings
         
         # Setup logging
         logging.basicConfig(
@@ -196,11 +207,15 @@ class PlexMQTTBridge:
                 if protocol_version == 5:
                     if rc == 0:
                         self.logger.info("MQTT v5 connection successful")
+                        # Initialize Home Assistant discovery after MQTT connection
+                        self._init_homeassistant_discovery()
                     else:
                         self.logger.error(f"MQTT v5 connection failed with code {rc}")
                 else:
                     if rc == 0:
                         self.logger.info("MQTT v3.1.1 connection successful")
+                        # Initialize Home Assistant discovery after MQTT connection
+                        self._init_homeassistant_discovery()
                     else:
                         self.logger.error(f"MQTT v3.1.1 connection failed with code {rc}")
             
@@ -499,13 +514,23 @@ class PlexMQTTBridge:
         self.seen_users.add(user)
         self.seen_devices.add(device)
         
+        # Create/update Home Assistant sensor for user/device combination
+        entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
+        if entity_id not in self.ha_sensors:
+            self._create_ha_sensor(user, device)
+        
+        # Update the sensor with current music info
+        self._update_ha_sensor(user, device, music_info)
+        
+        # Log new entries
+        if new_user:
+            self.logger.info(f"New user tracked: {user}")
+        if new_device:
+            self.logger.info(f"New device tracked: {device}")
+        
         # Auto-save if new users or devices were added
         if (new_user or new_device) and tracking_config.get('auto_save', True):
             self._save_tracking_data()
-            if new_user:
-                self.logger.info(f"New user tracked: {user}")
-            if new_device:
-                self.logger.info(f"New device tracked: {device}")
     
     def _publish_users_and_devices(self):
         """Publish arrays of seen users and devices if they have changed"""
@@ -747,6 +772,137 @@ class PlexMQTTBridge:
             
         except Exception as e:
             self.logger.error(f"Failed to update Last.fm now playing: {e}")
+    
+    def _init_homeassistant_discovery(self):
+        """Initialize Home Assistant MQTT Auto Discovery using ha-mqtt-discoverable"""
+        ha_config = self.config.get('homeassistant', {})
+        
+        if not ha_config.get('enabled', False):
+            self.logger.info("Home Assistant auto discovery is disabled")
+            return
+        
+        if not HA_DISCOVERABLE_AVAILABLE:
+            self.logger.error("Home Assistant auto discovery is enabled but ha-mqtt-discoverable library is not installed. Install with: pip install ha-mqtt-discoverable")
+            return
+        
+        try:
+            # Create HA MQTT settings using our existing MQTT client
+            self.ha_settings = Settings.MQTT(client=self.mqtt_client)
+            
+            self.logger.info("Home Assistant auto discovery initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Home Assistant auto discovery: {e}")
+            self.ha_settings = None
+    
+    def _create_ha_sensor(self, user: str, device: str):
+        """Create Home Assistant sensor for a user/device combination"""
+        if not self.ha_settings or not HA_DISCOVERABLE_AVAILABLE:
+            return
+        
+        try:
+            ha_config = self.config.get('homeassistant', {})
+            entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
+            
+            # Skip if sensor already exists
+            if entity_id in self.ha_sensors:
+                return
+            
+            # Device information
+            device_info = DeviceInfo(
+                name=ha_config.get('device_name', 'Plex MQTT Bridge'),
+                identifiers=ha_config.get('device_id', 'plex_mqtt_bridge'),
+                manufacturer=ha_config.get('manufacturer', 'ComputerComa'),
+                model=ha_config.get('model', 'Plex MQTT Bridge'),
+                sw_version=ha_config.get('sw_version', '1.0.0')
+            )
+            
+            # Sensor information
+            sensor_info = SensorInfo(
+                name=f"Plex {user} {device}",
+                unique_id=f"plex_{entity_id}",
+                icon="mdi:music",
+                device=device_info
+            )
+            
+            # Create sensor settings
+            sensor_settings = Settings(
+                mqtt=self.ha_settings,
+                entity=sensor_info
+            )
+            
+            # Create sensor
+            sensor = Sensor(sensor_settings)
+            
+            # Store the sensor
+            self.ha_sensors[entity_id] = sensor
+            
+            self.logger.info(f"Created Home Assistant sensor for {user}/{device}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create Home Assistant sensor for {user}/{device}: {e}")
+    
+    def _update_ha_sensor(self, user: str, device: str, music_info: Dict):
+        """Update Home Assistant sensor with current music info"""
+        if not self.ha_settings or not HA_DISCOVERABLE_AVAILABLE:
+            return
+        
+        try:
+            entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
+            
+            # Create sensor if it doesn't exist
+            if entity_id not in self.ha_sensors:
+                self._create_ha_sensor(user, device)
+            
+            sensor = self.ha_sensors.get(entity_id)
+            if not sensor:
+                return
+            
+            # Prepare state and attributes
+            state = music_info.get('title', 'Not Playing') if music_info.get('status') == 'playing' else 'Not Playing'
+            
+            attributes = {
+                'artist': music_info.get('artist', 'Unknown'),
+                'album': music_info.get('album', 'Unknown'),
+                'title': music_info.get('title', 'Unknown'),
+                'status': music_info.get('status', 'unknown'),
+                'progress_percent': music_info.get('progress_percent', 0),
+                'duration_formatted': music_info.get('duration_formatted', '0:00'),
+                'position_formatted': music_info.get('position_formatted', '0:00'),
+                'remaining_formatted': music_info.get('remaining_formatted', '0:00'),
+                'year': music_info.get('year', ''),
+                'track_number': music_info.get('track_number', ''),
+                'bitrate': music_info.get('bitrate', ''),
+                'codec': music_info.get('codec', ''),
+                'user': music_info.get('user', ''),
+                'device': music_info.get('device', ''),
+                'thumbnail': music_info.get('thumb', '')
+            }
+            
+            # Update sensor
+            sensor.set_state(state)
+            sensor.set_attributes(attributes)
+            
+            self.logger.debug(f"Updated Home Assistant sensor for {user}/{device}: {state}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update Home Assistant sensor for {user}/{device}: {e}")
+    
+    def _remove_ha_sensor(self, user: str, device: str):
+        """Remove Home Assistant sensor for a user/device"""
+        if not self.ha_settings or not HA_DISCOVERABLE_AVAILABLE:
+            return
+        
+        try:
+            entity_id = f"{user}_{device}".lower().replace('-', '_').replace(' ', '_')
+            
+            if entity_id in self.ha_sensors:
+                # The library doesn't have explicit removal, but we can delete our reference
+                del self.ha_sensors[entity_id]
+                self.logger.info(f"Removed Home Assistant sensor for {user}/{device}")
+                
+        except Exception as e:
+            self.logger.error(f"Error removing Home Assistant sensor for {user}/{device}: {e}")
     
     def _publish_to_mqtt(self, data: Dict, topic: str = None) -> bool:
         """Publish data to MQTT broker with v5 support"""

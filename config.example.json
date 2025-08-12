@@ -42,6 +42,15 @@
         "scrobble_threshold": 0.5,
         "min_duration": 30
     },
+    "homeassistant": {
+        "enabled": false,
+        "discovery_prefix": "homeassistant",
+        "device_name": "Plex MQTT Bridge",
+        "device_id": "plex_mqtt_bridge",
+        "manufacturer": "ComputerComa",
+        "model": "Plex MQTT Bridge",
+        "sw_version": "1.0.0"
+    },
     "publish_summary": false,
     "polling_interval": 5,
     "debug": false

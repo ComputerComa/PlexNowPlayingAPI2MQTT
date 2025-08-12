@@ -49,7 +49,9 @@ class WebInterface:
                 'tracked_devices_count': tracking_data['devices_count'],
                 'lastfm_enabled': self.bridge.config.get('lastfm', {}).get('enabled', False),
                 'lastfm_connected': self.bridge.lastfm_network is not None,
-                'lastfm_username': self.bridge.config.get('lastfm', {}).get('username', '') if self.bridge.config.get('lastfm', {}).get('enabled', False) else None
+                'lastfm_username': self.bridge.config.get('lastfm', {}).get('username', '') if self.bridge.config.get('lastfm', {}).get('enabled', False) else None,
+                'homeassistant_enabled': self.bridge.config.get('homeassistant', {}).get('enabled', False),
+                'homeassistant_discovered_entities': len(self.bridge.ha_sensors) if hasattr(self.bridge, 'ha_sensors') else 0
             }
             return jsonify(status_data)
         

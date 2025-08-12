@@ -466,6 +466,22 @@
                     ` : ''}
                 </div>
 
+                <div class="status-card ${statusData.homeassistant_enabled ? 'connected' : ''}">
+                    <h3>🏠 Home Assistant</h3>
+                    <div class="status-item">
+                        <span class="status-label">Auto Discovery:</span>
+                        <span class="connection-status ${statusData.homeassistant_enabled ? 'connected' : 'disconnected'}">
+                            ${statusData.homeassistant_enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                    </div>
+                    ${statusData.homeassistant_enabled ? `
+                    <div class="status-item">
+                        <span class="status-label">Discovered Entities:</span>
+                        <span class="status-value">${statusData.homeassistant_discovered_entities || 0}</span>
+                    </div>
+                    ` : ''}
+                </div>
+
                 <div class="status-card">
                     <h3>📊 Statistics</h3>
                     <div class="status-item">
