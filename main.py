@@ -695,6 +695,24 @@ class PlexMQTTBridge:
                 'total_devices': len(self.seen_devices)
             }
             
+            # Save Last.fm scrobble history to prevent duplicates across restarts
+            if hasattr(self, 'scrobbled_tracks') and self.scrobbled_tracks:
+                # Only save recent scrobbles (last 24 hours)
+                current_time = int(time.time())
+                recent_scrobbles = {}
+                for playback_id, scrobble_data in self.scrobbled_tracks.items():
+                    if isinstance(scrobble_data, dict) and 'timestamp' in scrobble_data:
+                        if current_time - scrobble_data['timestamp'] < 86400:  # 24 hours
+                            recent_scrobbles[playback_id] = scrobble_data
+                    elif isinstance(scrobble_data, (int, float)):
+                        # Handle old format (timestamp only)
+                        if current_time - scrobble_data < 86400:
+                            recent_scrobbles[playback_id] = {'timestamp': scrobble_data}
+                
+                if recent_scrobbles:
+                    data['scrobbled_tracks'] = recent_scrobbles
+                    self.logger.debug(f"Saved {len(recent_scrobbles)} recent scrobbles to persistence")
+            
             with open(persistence_file, 'w') as f:
                 json.dump(data, f, indent=2)
                 
@@ -767,9 +785,9 @@ class PlexMQTTBridge:
             duration = session_data.get('duration', 0)
             progress_percent = session_data.get('progress_percent', 0)
             track_number = session_data.get('track_number')
-            mbid = session_data.get('musicbrainz_id')  # MusicBrainz ID for better matching
+            mbid = session_data.get('musicbrainz_id')
             
-            # Check if track meets scrobble criteria
+            # Check if track meets basic scrobble criteria
             if not artist or not title:
                 self.logger.debug("Skipping scrobble: missing artist or title")
                 return
@@ -778,17 +796,26 @@ class PlexMQTTBridge:
                 self.logger.debug(f"Skipping scrobble: track too short ({duration/1000:.1f}s < {min_duration}s)")
                 return
             
+            # Create unique identifier for this specific listening session
+            # Use Plex's session key which is unique per track play session
+            plex_session_key = session_data.get('session_key', '')
+            user = session_data.get('user', 'unknown')
+            
+            # Simple track identifier for this specific play session
+            track_session_id = f"{user}:{plex_session_key}:{artist}:{title}"
+            
+            # Check if we've already scrobbled this specific track session
+            if track_session_id in self.scrobbled_tracks:
+                self.logger.debug(f"Already scrobbled this track session: {artist} - {title}")
+                return
+            
+            # Check if track has reached scrobble threshold
             if progress_percent < scrobble_threshold:
-                self.logger.debug(f"Skipping scrobble: not enough played ({progress_percent:.1%} < {scrobble_threshold:.1%})")
+                self.logger.debug(f"Scrobble threshold not reached: {artist} - {title} ({progress_percent:.1%} < {scrobble_threshold:.1%})")
                 return
             
-            # Create unique track identifier to avoid duplicate scrobbles
-            track_id = f"{artist}:{title}:{session_data.get('session_key', '')}"
-            
-            # Check if we've already scrobbled this track for this session
-            if track_id in self.scrobbled_tracks:
-                self.logger.debug(f"Already scrobbled: {artist} - {title}")
-                return
+            # Track has reached threshold - proceed with scrobble
+            self.logger.debug(f"Track reached scrobble threshold: {artist} - {title} ({progress_percent:.1%} played)")
             
             # Prepare scrobble parameters
             scrobble_params = {
@@ -808,10 +835,10 @@ class PlexMQTTBridge:
             # Scrobble the track
             self.lastfm_network.scrobble(**scrobble_params)
             
-            # Mark as scrobbled
-            self.scrobbled_tracks[track_id] = scrobble_params['timestamp']
+            # Mark this track session as scrobbled
+            self.scrobbled_tracks[track_session_id] = scrobble_params['timestamp']
             
-            # Clean up old scrobbled tracks (keep only last 100)
+            # Clean up old scrobbled tracks (keep only last 100 to handle long-running sessions)
             if len(self.scrobbled_tracks) > 100:
                 oldest_tracks = sorted(self.scrobbled_tracks.items(), key=lambda x: x[1])[:50]
                 for old_track_id, _ in oldest_tracks:

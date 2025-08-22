@@ -199,6 +199,9 @@ Verify your Last.fm setup with the test script:
 python test_lastfm.py
 ```
 
+**Duplicate Prevention:**
+The app prevents duplicate scrobbles by tracking each individual track listening session using Plex's unique session keys. Each track will only be scrobbled once per listening session, but the same song can be scrobbled again if you listen to it later (even the same day). This ensures accurate scrobbling without false duplicates while still allowing legitimate repeat listens.
+
 ## MQTT Message Format
 
 The application publishes enhanced JSON messages with progress tracking:

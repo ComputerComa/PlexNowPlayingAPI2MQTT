@@ -41,7 +41,8 @@
         "password": "YOUR_LASTFM_PASSWORD",
         "scrobble_threshold": 0.5,
         "min_duration": 30,
-        "enhance_metadata": false
+        "enhance_metadata": false,
+        "prevent_duplicates": true
     },
     "homeassistant": {
         "enabled": false,
