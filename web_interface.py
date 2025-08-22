@@ -125,8 +125,47 @@ class WebInterface:
             if 'mqtt' in config_copy:
                 if 'password' in config_copy['mqtt']:
                     config_copy['mqtt']['password'] = '***HIDDEN***'
+            if 'lastfm' in config_copy:
+                if 'api_key' in config_copy['lastfm']:
+                    config_copy['lastfm']['api_key'] = '***HIDDEN***'
+                if 'api_secret' in config_copy['lastfm']:
+                    config_copy['lastfm']['api_secret'] = '***HIDDEN***'
+                if 'password' in config_copy['lastfm']:
+                    config_copy['lastfm']['password'] = '***HIDDEN***'
             
             return jsonify(config_copy)
+        
+        @self.app.route('/api/lastfm/stats')
+        def api_lastfm_stats():
+            """API endpoint for Last.fm user statistics"""
+            if not self.bridge.config.get('lastfm', {}).get('enabled', False):
+                return jsonify({
+                    'enabled': False,
+                    'message': 'Last.fm integration is disabled'
+                })
+            
+            if not self.bridge.lastfm_network:
+                return jsonify({
+                    'enabled': True,
+                    'connected': False,
+                    'message': 'Last.fm connection not available'
+                })
+            
+            try:
+                stats = self.bridge.get_lastfm_user_stats()
+                return jsonify({
+                    'enabled': True,
+                    'connected': True,
+                    'stats': stats,
+                    'last_updated': datetime.now().isoformat()
+                })
+            except Exception as e:
+                return jsonify({
+                    'enabled': True,
+                    'connected': False,
+                    'error': str(e),
+                    'last_updated': datetime.now().isoformat()
+                }), 500
     
     def get_uptime(self):
         """Get application uptime"""

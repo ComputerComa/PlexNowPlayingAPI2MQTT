@@ -720,14 +720,15 @@ class PlexMQTTBridge:
             self.logger.error("Last.fm scrobbling is enabled but pylast library is not installed. Install with: pip install pylast")
             return
         
-        # Check required configuration
-        api_key = lastfm_config.get('api_key', '')
-        api_secret = lastfm_config.get('api_secret', '')
-        username = lastfm_config.get('username', '')
-        password = lastfm_config.get('password', '')
+        # Check required configuration - support environment variables
+        api_key = lastfm_config.get('api_key', '') or os.getenv('LASTFM_API_KEY', '')
+        api_secret = lastfm_config.get('api_secret', '') or os.getenv('LASTFM_API_SECRET', '')
+        username = lastfm_config.get('username', '') or os.getenv('LASTFM_USERNAME', '')
+        password = lastfm_config.get('password', '') or os.getenv('LASTFM_PASSWORD', '')
         
         if not all([api_key, api_secret, username, password]):
             self.logger.error("Last.fm scrobbling is enabled but missing required configuration (api_key, api_secret, username, password)")
+            self.logger.error("You can set these in config.json or use environment variables: LASTFM_API_KEY, LASTFM_API_SECRET, LASTFM_USERNAME, LASTFM_PASSWORD")
             return
         
         try:
@@ -760,20 +761,25 @@ class PlexMQTTBridge:
         
         try:
             # Get track information
-            artist = session_data.get('artist', '')
-            title = session_data.get('title', '')
-            album = session_data.get('album', '')
+            artist = session_data.get('artist', '').strip()
+            title = session_data.get('title', '').strip()
+            album = session_data.get('album', '').strip()
             duration = session_data.get('duration', 0)
             progress_percent = session_data.get('progress_percent', 0)
+            track_number = session_data.get('track_number')
+            mbid = session_data.get('musicbrainz_id')  # MusicBrainz ID for better matching
             
             # Check if track meets scrobble criteria
             if not artist or not title:
+                self.logger.debug("Skipping scrobble: missing artist or title")
                 return
             
             if duration < min_duration * 1000:  # duration is in ms
+                self.logger.debug(f"Skipping scrobble: track too short ({duration/1000:.1f}s < {min_duration}s)")
                 return
             
             if progress_percent < scrobble_threshold:
+                self.logger.debug(f"Skipping scrobble: not enough played ({progress_percent:.1%} < {scrobble_threshold:.1%})")
                 return
             
             # Create unique track identifier to avoid duplicate scrobbles
@@ -781,20 +787,29 @@ class PlexMQTTBridge:
             
             # Check if we've already scrobbled this track for this session
             if track_id in self.scrobbled_tracks:
+                self.logger.debug(f"Already scrobbled: {artist} - {title}")
                 return
             
-            # Scrobble the track
-            timestamp = int(time.time())
+            # Prepare scrobble parameters
+            scrobble_params = {
+                'artist': artist,
+                'title': title,
+                'timestamp': int(time.time())
+            }
             
-            self.lastfm_network.scrobble(
-                artist=artist,
-                title=title,
-                timestamp=timestamp,
-                album=album if album else None
-            )
+            # Add optional metadata
+            if album:
+                scrobble_params['album'] = album
+            if track_number:
+                scrobble_params['track_number'] = track_number
+            if mbid:
+                scrobble_params['mbid'] = mbid
+            
+            # Scrobble the track
+            self.lastfm_network.scrobble(**scrobble_params)
             
             # Mark as scrobbled
-            self.scrobbled_tracks[track_id] = timestamp
+            self.scrobbled_tracks[track_id] = scrobble_params['timestamp']
             
             # Clean up old scrobbled tracks (keep only last 100)
             if len(self.scrobbled_tracks) > 100:
@@ -802,8 +817,13 @@ class PlexMQTTBridge:
                 for old_track_id, _ in oldest_tracks:
                     del self.scrobbled_tracks[old_track_id]
             
-            self.logger.info(f"Scrobbled to Last.fm: {artist} - {title}")
+            album_info = f" (from {album})" if album else ""
+            self.logger.info(f"✓ Scrobbled to Last.fm: {artist} - {title}{album_info}")
             
+        except pylast.NetworkError as e:
+            self.logger.error(f"Last.fm network error during scrobble: {e}")
+        except pylast.WSError as e:
+            self.logger.error(f"Last.fm API error during scrobble: {e}")
         except Exception as e:
             self.logger.error(f"Failed to scrobble to Last.fm: {e}")
     
@@ -813,23 +833,150 @@ class PlexMQTTBridge:
             return
         
         try:
-            artist = session_data.get('artist', '')
-            title = session_data.get('title', '')
-            album = session_data.get('album', '')
+            artist = session_data.get('artist', '').strip()
+            title = session_data.get('title', '').strip()
+            album = session_data.get('album', '').strip()
+            track_number = session_data.get('track_number')
+            duration = session_data.get('duration', 0)
+            mbid = session_data.get('musicbrainz_id')
             
             if not artist or not title:
                 return
             
-            self.lastfm_network.update_now_playing(
-                artist=artist,
-                title=title,
-                album=album if album else None
-            )
+            # Prepare now playing parameters
+            now_playing_params = {
+                'artist': artist,
+                'title': title
+            }
             
-            self.logger.debug(f"Updated Last.fm now playing: {artist} - {title}")
+            # Add optional metadata
+            if album:
+                now_playing_params['album'] = album
+            if track_number:
+                now_playing_params['track_number'] = track_number
+            if duration > 0:
+                now_playing_params['duration'] = int(duration / 1000)  # Convert ms to seconds
+            if mbid:
+                now_playing_params['mbid'] = mbid
             
+            self.lastfm_network.update_now_playing(**now_playing_params)
+            
+            album_info = f" (from {album})" if album else ""
+            self.logger.debug(f"♪ Updated Last.fm now playing: {artist} - {title}{album_info}")
+            
+        except pylast.NetworkError as e:
+            self.logger.error(f"Last.fm network error updating now playing: {e}")
+        except pylast.WSError as e:
+            self.logger.error(f"Last.fm API error updating now playing: {e}")
         except Exception as e:
             self.logger.error(f"Failed to update Last.fm now playing: {e}")
+    
+    def _enhance_track_with_lastfm(self, session_data: Dict) -> Dict:
+        """Enhance track data with Last.fm metadata if available"""
+        if not self.lastfm_network:
+            return session_data
+        
+        lastfm_config = self.config.get('lastfm', {})
+        if not lastfm_config.get('enhance_metadata', False):
+            return session_data
+        
+        try:
+            artist = session_data.get('artist', '').strip()
+            title = session_data.get('title', '').strip()
+            
+            if not artist or not title:
+                return session_data
+            
+            # Get track from Last.fm
+            track = self.lastfm_network.get_track(artist, title)
+            
+            # Enhance with Last.fm data
+            enhanced_data = session_data.copy()
+            
+            # Add play count if available
+            try:
+                playcount = track.get_playcount()
+                if playcount is not None:
+                    enhanced_data['lastfm_playcount'] = playcount
+            except:
+                pass
+            
+            # Add tags if available
+            try:
+                tags = track.get_top_tags(limit=5)
+                if tags:
+                    enhanced_data['lastfm_tags'] = [tag.item.get_name() for tag in tags]
+            except:
+                pass
+            
+            # Add duration from Last.fm if not available from Plex
+            try:
+                if not session_data.get('duration'):
+                    lastfm_duration = track.get_duration()
+                    if lastfm_duration:
+                        enhanced_data['duration'] = int(lastfm_duration)
+            except:
+                pass
+            
+            return enhanced_data
+            
+        except Exception as e:
+            self.logger.debug(f"Could not enhance track with Last.fm data: {e}")
+            return session_data
+    
+    def get_lastfm_user_stats(self) -> Dict[str, Any]:
+        """Get Last.fm user statistics for web interface"""
+        if not self.lastfm_network:
+            return {}
+        
+        try:
+            lastfm_config = self.config.get('lastfm', {})
+            username = lastfm_config.get('username', '') or os.getenv('LASTFM_USERNAME', '')
+            
+            if not username:
+                return {}
+            
+            user = self.lastfm_network.get_user(username)
+            
+            stats = {
+                'username': username,
+                'playcount': user.get_playcount(),
+                'registered': user.get_registered(),
+                'url': user.get_url()
+            }
+            
+            # Get recent tracks
+            try:
+                recent_tracks = user.get_recent_tracks(limit=5)
+                stats['recent_tracks'] = [
+                    {
+                        'artist': str(track.track.artist),
+                        'title': str(track.track.title),
+                        'timestamp': track.timestamp
+                    }
+                    for track in recent_tracks
+                ]
+            except:
+                stats['recent_tracks'] = []
+            
+            # Get top artists
+            try:
+                top_artists = user.get_top_artists(period=pylast.PERIOD_7DAYS, limit=5)
+                stats['top_artists_week'] = [
+                    {
+                        'name': str(artist.item),
+                        'playcount': artist.weight
+                    }
+                    for artist in top_artists
+                ]
+            except:
+                stats['top_artists_week'] = []
+            
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get Last.fm user stats: {e}")
+            return {}
     
     def _init_homeassistant_discovery(self):
         """Initialize Home Assistant MQTT Auto Discovery using ha-mqtt-discoverable"""

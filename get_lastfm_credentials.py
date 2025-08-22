@@ -41,15 +41,24 @@ def print_instructions():
         "username": "YOUR_LASTFM_USERNAME",
         "password": "YOUR_LASTFM_PASSWORD",
         "scrobble_threshold": 0.5,
-        "min_duration": 30
+        "min_duration": 30,
+        "enhance_metadata": false
     },
     ...
 }
 ''')
     print()
     print("Configuration options:")
+    print("- enabled: Enable/disable Last.fm scrobbling")
     print("- scrobble_threshold: Percentage of track that must be played to scrobble (0.5 = 50%)")
     print("- min_duration: Minimum track duration in seconds to be eligible for scrobbling")
+    print("- enhance_metadata: Fetch additional metadata from Last.fm (tags, play counts)")
+    print()
+    print("Environment Variables (alternative to config file):")
+    print("- LASTFM_API_KEY: Your Last.fm API key")
+    print("- LASTFM_API_SECRET: Your Last.fm API secret")
+    print("- LASTFM_USERNAME: Your Last.fm username")
+    print("- LASTFM_PASSWORD: Your Last.fm password")
     print()
     print("Security note:")
     print("- Your Last.fm password is hashed before being sent to Last.fm")
